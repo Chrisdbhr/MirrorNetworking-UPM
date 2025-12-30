@@ -6,7 +6,7 @@ on:
   push:
     branches:
       - master
-  workflow_dispatch:
+  workflow_dispatch: 
 
 jobs:
   split-upm:
@@ -16,30 +16,32 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required for git subtree and tags history
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sync Version and Split
+      - name: Sync with Upstream and Split
         shell: bash
         run: |
-          # 1. Add the original repository as a remote and fetch its tags
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
           git remote add upstream https://github.com/mirrornetworking/mirror.git
-          git fetch upstream --tags
-          
-          # 2. Try to get version from root package.json, then from tags, then fallback to 0.0.0
+          git fetch upstream master --tags
+
+          git checkout master
+          git merge upstream/master --no-edit || echo "Already up to date or merge conflict"
+
           VERSION=$(node -p "require('./package.json').version" 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
           echo "Detected version: $VERSION"
 
-          # 3. Update internal package.json
           if [ -f Assets/package.json ]; then
             sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" Assets/package.json
+            git add Assets/package.json
+            git commit -m "chore: update Assets package version to $VERSION" || echo "No changes to commit"
           fi
 
-          # 4. Git config
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          
-          # 5. Commit and Split
-          git add Assets/package.json
-          git commit -m "chore: update Assets package version to $VERSION" || echo "No changes to commit"
+          git push origin master
+
+          git branch -D upm || true
           git subtree split --prefix=Assets -b upm
           git push -f origin upm:upm
