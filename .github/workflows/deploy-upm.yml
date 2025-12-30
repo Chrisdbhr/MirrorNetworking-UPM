@@ -3,14 +3,17 @@ name: Deploy UPM Branch
 on:
   schedule:
     - cron: '0 */12 * * *'
-  push:
-    branches:
-      - master
-  workflow_dispatch: 
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   split-upm:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout repository
@@ -19,7 +22,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sync with Upstream and Split
+      - name: Sync, Split and Tag
         shell: bash
         run: |
           git config --global user.name 'github-actions[bot]'
@@ -29,19 +32,25 @@ jobs:
           git fetch upstream master --tags
 
           git checkout master
-          git merge upstream/master --no-edit || echo "Already up to date or merge conflict"
+          git reset --hard upstream/master
 
           VERSION=$(node -p "require('./package.json').version" 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
-          echo "Detected version: $VERSION"
 
           if [ -f Assets/package.json ]; then
             sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" Assets/package.json
             git add Assets/package.json
-            git commit -m "chore: update Assets package version to $VERSION" || echo "No changes to commit"
+            git diff-index --quiet HEAD || git commit -m "chore: update Assets package version to $VERSION"
           fi
-
-          git push origin master
 
           git branch -D upm || true
           git subtree split --prefix=Assets -b upm
+
+          CURRENT_TAG=$(git describe --tags --exact-match upstream/master 2>/dev/null || echo "")
+
+          if [ ! -z "$CURRENT_TAG" ]; then
+            git tag -f "$CURRENT_TAG" upm
+            git push -f origin "$CURRENT_TAG"
+          fi
+
           git push -f origin upm:upm
+          git push -f origin master
