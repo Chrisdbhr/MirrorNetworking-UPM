@@ -1,7 +1,7 @@
 {
   "name": "com.mirrorng.mirror",
   "displayName": "Mirror Networking - ChrisJogos UPM Fork",
-  "version": "96.9.2",
+  "version": "v96.9.3",
   "unity": "2021.3",
   "description": "#1 Open Source Unity Networking Library. Optimized for UPM installation.",
   "keywords": [
